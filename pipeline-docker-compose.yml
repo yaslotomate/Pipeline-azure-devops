@@ -1,0 +1,106 @@
+trigger:
+    branches:
+      include:
+      - yanis
+
+variables:
+  azureContainerRegistry: 'lotomatemsv4.azurecr.io'
+  azureSubscriptionEndpoint: 'LotomateMSV4-ressource-grope'
+  dockerRegistryServiceConnection: 'LotomateMSV4'
+  tag: '$(Build.BuildId)'
+  imagePullSecret: 'acrauth'
+  kubernetesServiceConnection: 'aks-msv4'
+
+  
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:  
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: DockerCompose@0
+      displayName: Build services
+      inputs:
+        action: Build services
+        azureSubscriptionEndpoint: $(azureSubscriptionEndpoint)
+        azureContainerRegistry: $(azureContainerRegistry)
+        dockerComposeFile: '**/LotomateMSV4/Deployments/DockerCompose/docker-compose-special-pipeline/docker-compose.yml'
+        projectName: $(Build.Repository.Name)
+        qualifyImageNames: true
+        additionalImageTags: $(Build.BuildId)
+        dockerComposeFileArgs: |
+          firstArg=$(firstArg)
+          secondArg=$(secondArg)
+    - task: DockerCompose@0
+      displayName: Push services
+      inputs:
+        action: Push services
+        azureSubscriptionEndpoint: $(azureSubscriptionEndpoint)
+        azureContainerRegistry: $(azureContainerRegistry)
+        dockerComposeFile: '**/LotomateMSV4/Deployments/DockerCompose/docker-compose-special-pipeline/docker-compose.yml'
+        projectName: $(Build.Repository.Name)
+        qualifyImageNames: true
+        additionalImageTags: $(Build.BuildId)
+          
+    - upload: $(System.DefaultWorkingDirectory)/LotomateMSV4/Deployments/manifests
+      artifact: manifests
+
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy
+    pool:
+      vmImage: ubuntu-latest
+    environment: 'msv4env'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: qetza.replacetokens.replacetokens-task.replacetokens@3
+            displayName: 'replace token in yml file'
+            inputs:
+              rootDirectory: '$(Pipeline.Workspace)'
+              targetFiles: |
+                **/*.yaml
+              encoding: 'auto'
+              writeBOM: true
+              actionOnMissing: 'warn'
+              keepToken: false
+              tokenPrefix: '#{'
+              tokenSuffix: '}#'
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: createSecret
+              secretName: $(imagePullSecret)
+              dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+              kubernetesServiceConnection: $(kubernetesServiceConnection)
+
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes cluster
+            inputs:
+              action: deploy
+              kubernetesServiceConnection: $(kubernetesServiceConnection)
+              manifests: |
+                $(Pipeline.Workspace)/manifests/deploiment-administration.yaml
+                $(Pipeline.Workspace)/manifests/deploiment-project-api.yaml
+                $(Pipeline.Workspace)/manifests/deploiment-identity-server.yaml  
+                $(Pipeline.Workspace)/manifests/deploiment-apigetway.yaml 
+              imagePullSecrets: |
+
+                $(imagePullSecret)
+                
+              containers: |
+
+                $(containerRegistry)/$(imageRepository-administation):$(tag)
+                $(containerRegistry)/$(imageRepository-project-api):$(tag)
+                $(containerRegistry)/$(imageRepository-identity-server):$(tag)
+                $(containerRegistry)/$(imageRepository-apigetway):$(tag)
