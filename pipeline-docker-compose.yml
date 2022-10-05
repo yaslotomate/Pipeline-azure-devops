@@ -4,12 +4,12 @@ trigger:
       - yanis
 
 variables:
-  azureContainerRegistry: 'lotomatemsv4.azurecr.io'
-  azureSubscriptionEndpoint: 'LotomateMSV4-ressource-grope'
-  dockerRegistryServiceConnection: 'LotomateMSV4'
+  azureContainerRegistry: 'loto'
+  azureSubscriptionEndpoint: 'Lotomrope'
+  dockerRegistryServiceConnection: 'LV4'
   tag: '$(Build.BuildId)'
-  imagePullSecret: 'acrauth'
-  kubernetesServiceConnection: 'aks-msv4'
+  imagePullSecret: 'ach'
+  kubernetesServiceConnection: 'aks'
 
   
 
